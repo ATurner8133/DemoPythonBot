@@ -6,79 +6,72 @@
 #
 
 import wpilib
-
-kLEDBuffer = 60
+import wpilib.drive
 
 
 class MyRobot(wpilib.TimedRobot):
     def robotInit(self):
-        self.arduino = wpilib.SerialPort(9600, wpilib.SerialPort.Port.kUSB1)
-        # PWM Port 9
-        # Must be a PWM header, not MXP or DIO
-        self.led = wpilib.AddressableLED(9)
-
-        # LED Data
-        self.ledData = [wpilib.AddressableLED.LEDData() for _ in range(kLEDBuffer)]
-
-        # Store what the last hue of the first pixel is
-        self.rainbowFirstPixelHue = 0
-
-        # Default to a length of 60, start empty output
-        # Length is expensive to set, so only set it once, then just update data
-        self.led.setLength(kLEDBuffer)
-
-        # Set the data
-        self.led.setData(self.ledData)
-        self.led.start()
-
-        self.signature_timer = wpilib.Timer()
-        self.signature_timer.start()
-
-    def robotPeriodic(self):
-        #Set Leds
-        self.led.setData(self.ledData)
-
-        #Check for incoming data from arduino
-        if self.arduino.getBytesReceived() > 0:
-            #Store Data in arduinoData variable
-            arduinoData = self.readString(self.arduino)
-            #If arduino sends "Y" turn LEDs green and restart timer
-            if arduinoData == "Y": 
-             for i in range(len(self.ledData)):
-                 self.ledData[i].setRGB(64, 255, 0)
-                 self.signature_timer.restart()
-            #If arduino sends "N" and timer has elasped .15 seconds (for visual protection) turn LEDs red
-            if self.signature_timer.hasElapsed(.15) and arduinoData == "N":
-                for i in range(len(self.ledData)):
-                    self.ledData[i].setRGB(255, 0, 0)
-        #set LEDs again
-        self.led.setData(self.ledData)
-         
+        """
+        This function is called upon program startup and
+        should be used for any initialization code.
+        """
+        # Right Motors
+        self.leftFront = wpilib.Spark(0)
+        self.leftRear = wpilib.Spark(2)
+        self.leftGroup = wpilib.MotorControllerGroup(self.leftFront, self.leftRear)
         
+        # Left Motors
+        self.rightFront = wpilib.Spark(1)
+        self.rightRear = wpilib.Spark(3)
+        self.rightGroup = wpilib.MotorControllerGroup(self.rightFront, self.rightRear)
+
+        # Assemble Drive Train
+        self.robotDrive = wpilib.drive.DifferentialDrive(
+            self.leftGroup, self.rightGroup
+        )
         
-    def readString(self, port) -> str:
-        # Function to read a string from the serial port
-        sz = port.getBytesReceived()
-        buf = bytearray(sz)
-        sz = port.read(buf)
-        return buf[:sz].decode("ascii")
+        self.timer = wpilib.Timer()
 
-    
-    # def rainbow(self):
-    #     # For every pixel
-    #     for i in range(kLEDBuffer):
-    #         # Calculate the hue - hue is easier for rainbows because the color
-    #         # shape is a circle so only one value needs to precess
-    #         hue = (self.rainbowFirstPixelHue + (i * 180 / kLEDBuffer)) % 180
+        # We need to invert one side of the drivetrain so that positive voltages
+        # result in both sides moving forward. Depending on how your robot's
+        # gearbox is constructed, you might have to invert the left side instead.
+        self.rightGroup.setInverted(True)
+       
+       #Initialize Controller
+        self.controller = wpilib.XboxController(0)
+        
 
-    #         # Set the value
-    #         self.ledData[i].setHSV(int(hue), 255, 128)
+    def autonomousInit(self):
+         """This function is run once each time the robot enters autonomous mode."""
+         self.timer.restart()
 
-    #     # Increase by to make the rainbow "move"
-    #     self.rainbowFirstPixelHue += 3
+    def autonomousPeriodic(self):
+        """This function is called periodically during autonomous.
 
-    #     # Check bounds
-    #     self.rainbowFirstPixelHue %= 180
+        # Drive for two seconds
+        if self.timer.get() < 2.0:
+            # Drive forwards half speed, make sure to turn input squaring off
+            self.robotDrive.arcadeDrive(0.5, 0, squareInputs=False)
+        else:
+            self.robotDrive.stopMotor()  # Stop robot
+        """
+
+    def teleopInit(self):
+        """This function is called once each time the robot enters teleoperated mode."""
+
+    def teleopPeriodic(self):
+        """This function is called periodically during teleoperated mode."""
+        #Use Y Axis data to control corresponding side of robot
+        self.robotDrive.tankDrive(
+            -self.controller.getLeftY(), -self.controller.getRightY()
+        )
+
+
+    def testInit(self):
+        """This function is called once each time the robot enters test mode."""
+
+    def testPeriodic(self):
+        """This function is called periodically during test mode."""
 
 
 if __name__ == "__main__":
